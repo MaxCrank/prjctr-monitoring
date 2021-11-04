@@ -1,0 +1,79 @@
+services:
+
+  prjctr-influxdb:
+    image: influxdb:latest
+    container_name: prjctr-influxdb
+    ports:
+      - "8083:8083"
+      - "8086:8086"
+      - "8090:8090"
+    env_file:
+      - 'env.influxdb'
+    volumes:
+      - ./influxdb:/var/lib/influxdb
+      - ./influxdb2:/var/lib/influxdb2
+
+  prjctr-telegraf:
+    image: telegraf:latest
+    container_name: prjctr-telegraf
+    depends_on:
+      prjctr-mongodb:
+        condition: service_healthy
+      prjctr-influxdb:
+        condition: service_started
+    volumes:
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+
+  prjctr-grafana:
+    image: grafana/grafana:latest
+    container_name: prjctr-grafana
+    ports:
+      - "3000:3000"
+    env_file:
+      - 'env.grafana'
+    user: "0"
+    depends_on:
+      - prjctr-influxdb
+    volumes:
+      - ./grafana/data:/var/lib/grafana
+
+  prjctr-mongodb:
+    image: mongo:4.4.10-focal
+    container_name: prjctr-mongodb
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongo localhost:27017/prjctr
+      interval: 10s
+      timeout: 10s
+      retries: 2
+      start_period: 20s
+    env_file:
+      - 'env.mongodb'
+    volumes:
+      - ./mongodb/data/db:/data/db
+      - ./mongodb/data/configdb:/data/configdb
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+
+  prjctr-webapi:
+    image: prjctr-webapi
+    build: 
+      context: ./src/
+      dockerfile: ./MonitoringLoadApp/Dockerfile
+    container_name: prjctr-webapi
+    depends_on:
+      prjctr-mongodb:
+        condition: service_healthy
+    ports:
+      - "5000:80"
+      - "5001:443"
+      
+  prjctr-ab:
+    image: prjctr-ab
+    build: 
+      context: ./
+      dockerfile: Dockerfile.ab
+    container_name: prjctr-ab
+    depends_on:
+      - prjctr-webapi
+      - prjctr-grafana

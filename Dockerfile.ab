@@ -1,0 +1,6 @@
+FROM alpine
+
+RUN apk add -U apache2-utils
+RUN rm -rf /var/cache/apk/*
+
+CMD sleep 10 && ab -n 100 -c 10 -m GET -v 2 "http://prjctr-webapi/api/v1/WeatherForecasts/randombatch"
